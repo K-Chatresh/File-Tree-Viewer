@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive & Copyable File Tree Creator</title>
+    <style>
+        /* Base CSS Variables for Light/Dark Themes */
+        :root {
+            --bg-color: #1e1e2e;
+            --text-color: #cdd6f4;
+            --card-bg: #181825;
+            --border-color: #313244;
+            --btn-bg: #313244;
+            --heading-color: #f5e0dc;
+            --subtext-color: #a6adc8;
+            --file-color: #bac2de;
+            --folder-color: #f9e2af;
+        }
+
+        [data-theme="light"] {
+            --bg-color: #f8f9fa;
+            --text-color: #1a1a1a;
+            --card-bg: #ffffff;
+            --border-color: #e0e0e0;
+            --btn-bg: #e9ecef;
+            --heading-color: #2b2b2b;
+            --subtext-color: #555555;
+            --file-color: #444444;
+            --folder-color: #d97706;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        h1 {
+            color: var(--heading-color);
+            margin-bottom: 10px;
+        }
+
+        p {
+            color: var(--subtext-color);
+            margin-bottom: 20px;
+        }
+
+        /* Toggle Container Fixed at Top Right */
+        .theme-toggle-container {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            z-index: 1000;
+        }
+
+        /* Toggle Button Styling */
+        #themeToggleBtn {
+            background-color: var(--btn-bg);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s ease, background-color 0.3s ease;
+        }
+
+        #themeToggleBtn:hover {
+            transform: scale(1.08);
+        }
+
+        /* Icon Visibility Logic */
+        [data-theme="light"] .icon-sun { display: none; }
+        [data-theme="light"] .icon-moon { display: inline; }
+
+        :root:not([data-theme="light"]) .icon-sun { display: inline; }
+        :root:not([data-theme="light"]) .icon-moon { display: none; }
+
+        .btn-group {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.1s;
+        }
+
+        .upload-btn {
+            background-color: #89b4fa;
+            color: #11111b;
+        }
+
+        .upload-btn:hover {
+            background-color: #b4befe;
+        }
+
+        .copy-btn {
+            background-color: #a6e3a1;
+            color: #11111b;
+            display: none;
+        }
+
+        .copy-btn:hover {
+            background-color: #94e2d5;
+        }
+
+        #tree-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            display: none;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+        
+        ul {
+            list-style-type: none;
+            padding-left: 20px;
+            margin: 5px 0;
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+        
+        #tree-root {
+            padding-left: 0;
+        }
+
+        li {
+            margin: 4px 0;
+            position: relative;
+        }
+
+        .folder {
+            font-weight: 600;
+            color: var(--folder-color);
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .folder::before {
+            content: "📁 ";
+        }
+
+        .folder.open::before {
+            content: "📂 ";
+        }
+
+        .file {
+            color: var(--file-color);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .file::before {
+            content: "📄 ";
+        }
+
+        .nested {
+            display: none;
+        }
+
+        .active {
+            display: flex;
+        }
+
+        .exclude-btn {
+            background: none;
+            border: none;
+            color: #f38ba8;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: bold;
+            padding: 0 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            border-radius: 3px;
+        }
+
+        li:hover > .exclude-btn, .file:hover .exclude-btn {
+            opacity: 1;
+        }
+
+        .exclude-btn:hover {
+            background-color: var(--border-color);
+        }
+
+        .excluded-item {
+            opacity: 0.35;
+            text-decoration: line-through;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="theme-toggle-container">
+        <button id="themeToggleBtn" aria-label="Toggle theme">
+            <span class="icon-sun">☀️</span>
+            <span class="icon-moon">🌙</span>
+        </button>
+    </div>
+
+    <h1>File Tree Creator</h1>
+    <p>Select a folder to generate an interactive tree, then copy it to your clipboard. Click the '×' next to files or folders to exclude their context.</p>
+    
+    <div class="btn-group">
+        <button class="btn upload-btn" id="select-folder-btn">Select Folder</button>
+        <button class="btn copy-btn" id="copy-tree-btn">📋 Copy Tree Text</button>
+    </div>
+
+    <div id="tree-container">
+        <ul id="tree-root"></ul>
+    </div>
+
+    <script>
+        // Apply stored theme immediately on load to prevent flickering
+        const storedTheme = localStorage.getItem('theme');
+        if (storedTheme) {
+            document.documentElement.setAttribute('data-theme', storedTheme);
+        }
+
+        const toggleBtn = document.getElementById('themeToggleBtn');
+        toggleBtn.addEventListener('click', () => {
+            const isLight = document.documentElement.getAttribute('data-theme') === 'light';
+            const newTheme = isLight ? 'dark' : 'light';
+            
+            if (newTheme === 'dark') {
+                document.documentElement.removeAttribute('data-theme');
+            } else {
+                document.documentElement.setAttribute('data-theme', 'light');
+            }
+            
+            localStorage.setItem('theme', newTheme);
+        });
+
+        let rootDirectoryHandle = null;
+        let excludedPaths = new Set();
+
+        document.getElementById('select-folder-btn').addEventListener('click', async () => {
+            try {
+                rootDirectoryHandle = await window.showDirectoryPicker();
+                
+                const container = document.getElementById('tree-container');
+                const rootUl = document.getElementById('tree-root');
+                const copyBtn = document.getElementById('copy-tree-btn');
+                
+                rootUl.innerHTML = '';
+                excludedPaths.clear();
+                container.style.display = 'block';
+                copyBtn.style.display = 'inline-block';
+
+                await buildTree(rootDirectoryHandle, rootUl, "");
+
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    alert('Error accessing directory: ' + err.message);
+                }
+            }
+        });
+
+        async function buildTree(dirHandle, parentElement, currentPath) {
+            const myPath = currentPath ? `${currentPath}/${dirHandle.name}` : dirHandle.name;
+
+            const dirLi = document.createElement('li');
+            dirLi.classList.add('folder', 'open');
+            
+            const nameSpan = document.createElement('span');
+            nameSpan.textContent = dirHandle.name;
+            dirLi.appendChild(nameSpan);
+
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'exclude-btn';
+            closeBtn.innerHTML = '×';
+            closeBtn.title = "Exclude folder from context";
+            dirLi.appendChild(closeBtn);
+            
+            parentElement.appendChild(dirLi);
+
+            const childUl = document.createElement('ul');
+            childUl.classList.add('nested', 'active');
+            parentElement.appendChild(childUl);
+
+            nameSpan.addEventListener('click', (e) => {
+                e.stopPropagation();
+                childUl.classList.toggle('active');
+                dirLi.classList.toggle('open');
+            });
+
+            closeBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (excludedPaths.has(myPath)) {
+                    excludedPaths.delete(myPath);
+                    dirLi.classList.remove('excluded-item');
+                    childUl.classList.remove('excluded-item');
+                } else {
+                    excludedPaths.add(myPath);
+                    dirLi.classList.add('excluded-item');
+                    childUl.classList.add('excluded-item');
+                }
+            });
+
+            for await (const entry of dirHandle.values()) {
+                if (entry.kind === 'directory') {
+                    await buildTree(entry, childUl, myPath);
+                } else if (entry.kind === 'file') {
+                    const fileBoxPath = `${myPath}/${entry.name}`;
+                    
+                    const fileLi = document.createElement('li');
+                    fileLi.classList.add('file');
+                    
+                    const fileNameSpan = document.createElement('span');
+                    fileNameSpan.textContent = entry.name;
+                    fileLi.appendChild(fileNameSpan);
+
+                    const fileCloseBtn = document.createElement('button');
+                    fileCloseBtn.className = 'exclude-btn';
+                    fileCloseBtn.innerHTML = '×';
+                    fileCloseBtn.title = "Exclude file from context";
+                    fileLi.appendChild(fileCloseBtn);
+
+                    fileCloseBtn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        if (excludedPaths.has(fileBoxPath)) {
+                            excludedPaths.delete(fileBoxPath);
+                            fileLi.classList.remove('excluded-item');
+                        } else {
+                            excludedPaths.add(fileBoxPath);
+                            fileLi.classList.add('excluded-item');
+                        }
+                    });
+
+                    childUl.appendChild(fileLi);
+                }
+            }
+        }
+
+        document.getElementById('copy-tree-btn').addEventListener('click', async () => {
+            if (!rootDirectoryHandle) return;
+            
+            const btn = document.getElementById('copy-tree-btn');
+            try {
+                if (excludedPaths.has(rootDirectoryHandle.name)) {
+                    await navigator.clipboard.writeText("");
+                    alert("Entire root structure is excluded!");
+                    return;
+                }
+
+                let textTree = rootDirectoryHandle.name + '\n';
+                textTree += await generateTextTree(rootDirectoryHandle, "", rootDirectoryHandle.name);
+                
+                await navigator.clipboard.writeText(textTree);
+                
+                const originalText = btn.innerHTML;
+                btn.innerHTML = "✅ Copied!";
+                btn.style.backgroundColor = "#94e2d5";
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.style.backgroundColor = "#a6e3a1";
+                }, 2000);
+
+            } catch (err) {
+                alert('Failed to copy tree: ' + err.message);
+            }
+        });
+
+(function() {
+    const savedTheme = localStorage.getItem('tree-viewer-theme');
+    if (savedTheme) {
+      document.documentElement.setAttribute('data-theme', savedTheme);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
+  })();
+
+        async function generateTextTree(dirHandle, prefix, currentPath) {
+            let output = "";
+            const entries = [];
+            
+            for await (const entry of dirHandle.values()) {
+                const targetPath = `${currentPath}/${entry.name}`;
+                if (!excludedPaths.has(targetPath)) {
+                    entries.push(entry);
+                }
+            }
+
+            entries.sort((a, b) => (b.kind === 'directory') - (a.kind === 'directory') || a.name.localeCompare(b.name));
+
+            for (let i = 0; i < entries.length; i++) {
+                const entry = entries[i];
+                const entryPath = `${currentPath}/${entry.name}`;
+                const isLast = (i === entries.length - 1);
+                const connector = isLast ? "└── " : "├── ";
+                
+                output += prefix + connector + entry.name + "\n";
+                
+                if (entry.kind === 'directory') {
+                    const newPrefix = prefix + (isLast ? "    " : "│   ");
+                    output += await generateTextTree(entry, newPrefix, entryPath);
+                }
+            }
+            return output;
+        }
+    </script>
+</body>
+</html>
