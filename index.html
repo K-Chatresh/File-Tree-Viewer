@@ -220,7 +220,7 @@
     </div>
 
     <h1>File Tree Creator</h1>
-    <p>Select a folder to generate an interactive tree, then copy it to your clipboard. Click the '×' next to files or folders to exclude their context.</p>
+    <p>Select a folder to generate an interactive tree, then copy it to your clipboard. Files and folders matched by .gitignore are hidden automatically. Click the '×' next to files or folders to exclude their context.</p>
     
     <div class="btn-group">
         <button class="btn upload-btn" id="select-folder-btn">Select Folder</button>
@@ -231,6 +231,8 @@
         <ul id="tree-root"></ul>
     </div>
 
+    <script src="vendor/ignore.js"></script>
+    <script src="tree-filter.js"></script>
     <script>
         // Apply stored theme immediately on load to prevent flickering
         const storedTheme = localStorage.getItem('theme');
@@ -254,6 +256,7 @@
 
         let rootDirectoryHandle = null;
         let excludedPaths = new Set();
+        let treeFilter = createTreeFilter();
 
         document.getElementById('select-folder-btn').addEventListener('click', async () => {
             try {
@@ -265,6 +268,7 @@
                 
                 rootUl.innerHTML = '';
                 excludedPaths.clear();
+                treeFilter = createTreeFilter();
                 container.style.display = 'block';
                 copyBtn.style.display = 'inline-block';
 
@@ -277,7 +281,7 @@
             }
         });
 
-        async function buildTree(dirHandle, parentElement, currentPath) {
+        async function buildTree(dirHandle, parentElement, currentPath, relativePath = "", inheritedRules = []) {
             const myPath = currentPath ? `${currentPath}/${dirHandle.name}` : dirHandle.name;
 
             const dirLi = document.createElement('li');
@@ -318,9 +322,10 @@
                 }
             });
 
-            for await (const entry of dirHandle.values()) {
+            const { entries, rules } = await treeFilter.visibleEntries(dirHandle, relativePath, inheritedRules);
+            for (const entry of entries) {
                 if (entry.kind === 'directory') {
-                    await buildTree(entry, childUl, myPath);
+                    await buildTree(entry, childUl, myPath, relativePath ? `${relativePath}/${entry.name}` : entry.name, rules);
                 } else if (entry.kind === 'file') {
                     const fileBoxPath = `${myPath}/${entry.name}`;
                     
@@ -391,11 +396,12 @@
     }
   })();
 
-        async function generateTextTree(dirHandle, prefix, currentPath) {
+        async function generateTextTree(dirHandle, prefix, currentPath, relativePath = "", inheritedRules = []) {
             let output = "";
             const entries = [];
             
-            for await (const entry of dirHandle.values()) {
+            const { entries: visible, rules } = await treeFilter.visibleEntries(dirHandle, relativePath, inheritedRules);
+            for (const entry of visible) {
                 const targetPath = `${currentPath}/${entry.name}`;
                 if (!excludedPaths.has(targetPath)) {
                     entries.push(entry);
@@ -414,7 +420,7 @@
                 
                 if (entry.kind === 'directory') {
                     const newPrefix = prefix + (isLast ? "    " : "│   ");
-                    output += await generateTextTree(entry, newPrefix, entryPath);
+                    output += await generateTextTree(entry, newPrefix, entryPath, relativePath ? `${relativePath}/${entry.name}` : entry.name, rules);
                 }
             }
             return output;

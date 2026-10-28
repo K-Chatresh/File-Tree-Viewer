@@ -12,11 +12,7 @@ function createWindow() {
     }
   });
 
-  win.loadFile('tree_viewer.html');
-
-
-  // Loads your HTML file in a standalone window
-  win.loadFile('tree_viewer.html');
+  win.loadFile('index.html');
 }
 
 app.whenReady().then(createWindow);
