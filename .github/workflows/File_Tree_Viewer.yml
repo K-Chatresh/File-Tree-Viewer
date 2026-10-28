@@ -1,1 +1,77 @@
+name: File Tree Viewer Builds
 
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: file-tree-viewer-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            label: Linux DEB (x64)
+            args: --linux deb --x64
+            artifact: File-Tree-Viewer-Linux-x64
+            path: dist/*.deb
+          - os: windows-latest
+            label: Windows EXE (x64)
+            args: --win nsis --x64
+            artifact: File-Tree-Viewer-Windows-x64
+            path: dist/*.exe
+          - os: macos-15
+            label: macOS DMG (Intel and Apple Silicon)
+            args: --mac dmg --x64 --arm64
+            artifact: File-Tree-Viewer-macOS
+            path: dist/*.dmg
+
+    env:
+      # Produce unsigned installers without requiring signing secrets.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Rebuild browser dependency
+        run: npm run build:ignore
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build installer
+        run: npm run dist -- ${{ matrix.args }} --publish never
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}
+          if-no-files-found: error
+          retention-days: 30
